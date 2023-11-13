@@ -30,6 +30,67 @@ pub struct Request {
     pub headers: HashMap<String, String>,
 }
 
+#[derive(Debug, Default)]
+pub enum HTTPStatus {
+    #[default]
+    OK,
+    BadRequest,
+}
+
+#[derive(Debug)]
+pub struct Response {
+    status: HTTPStatus,
+    headers: HashMap::<String, String>,
+    body: String,
+    version: String,
+}
+
+impl Default for Response {
+    fn default() -> Self {
+        Self {
+            status: HTTPStatus::default(),
+            headers: HashMap::new(),
+            body: String::new(),
+            version: String::from("HTTP/1.1"),
+        }
+    }
+}
+
+impl ToString for Response {
+    fn to_string(&self) -> String {
+        let mut resp = String::new();
+
+        let (code, message) = match self.status {
+            HTTPStatus::OK => (200, "OK"),
+            HTTPStatus::BadRequest => (400, "Bad Request")
+        };
+
+        resp.push_str(format!("{} {} {}\r\n", self.version, code, message).as_str());
+
+        for (key, val) in self.headers.iter() {
+            resp.push_str(format!("{}: {}\r\n", key, val).as_str());
+        }
+
+        resp.push_str("\r\n");
+        resp.push_str(&self.body);
+
+        resp
+    }
+}
+
+impl Response {
+    fn add_header(&mut self, key: &str, value: &str) {
+        self.headers.insert(key.into(), value.into());
+    }
+
+    fn add_body(&mut self, body: String) {
+        self.body = body;
+        self.add_header("Content-Type", "text/html");
+        self.add_header("Content-Length", &self.body.len().to_string());
+    }
+}
+
+
 pub fn parse_request(stream: &TcpStream) -> Option<Request> {
     let buffer = BufReader::new(stream);
     let mut lines = buffer.lines();
@@ -68,11 +129,16 @@ pub fn parse_request(stream: &TcpStream) -> Option<Request> {
 
 pub fn handle_request(mut stream: TcpStream) {
     let request = parse_request(&stream);
-    println!("{:?}", request);
+
     if let Some(req) = request {
         match req.method {
             RequestMethod::GET => {
-                stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>Hello World!</h1>")
+                println!("{:?} {}", req.method, req.path);
+
+                let mut response = Response::default();
+                response.add_body("<h1>Hello World!</h1>".into());
+
+                stream.write_all(response.to_string().as_bytes())
                     .unwrap();
             },
             _ => panic!("Method not implemented.")

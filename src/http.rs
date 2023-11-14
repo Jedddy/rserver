@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpStream, Shutdown};
 
@@ -80,10 +81,10 @@ impl ToString for Response {
 
 impl Response {
     fn add_header(&mut self, key: &str, value: &str) {
-        self.headers.insert(key.into(), value.into());
+        self.headers.entry(key.to_string()).or_insert(value.to_string());
     }
 
-    fn add_body(&mut self, body: String) {
+    fn set_body(&mut self, body: String) {
         self.body = body;
         self.add_header("Content-Type", "text/html");
         self.add_header("Content-Length", &self.body.len().to_string());
@@ -94,6 +95,7 @@ impl Response {
 pub fn parse_request(stream: &TcpStream) -> Option<Request> {
     let buffer = BufReader::new(stream);
     let mut lines = buffer.lines();
+
     if let Some(info) = lines.next() {
         let info = info.unwrap();
         let first = info
@@ -131,18 +133,30 @@ pub fn handle_request(mut stream: TcpStream) {
     let request = parse_request(&stream);
 
     if let Some(req) = request {
+        println!("{:?} {}", req.method, req.path);
+
+        let mut response = Response::default();
+
         match req.method {
             RequestMethod::GET => {
-                println!("{:?} {}", req.method, req.path);
-
-                let mut response = Response::default();
-                response.add_body("<h1>Hello World!</h1>".into());
-
-                stream.write_all(response.to_string().as_bytes())
-                    .unwrap();
+                match req.path.as_str() {
+                    "/" => {
+                        let html = fs::read_to_string("static/index.html").unwrap();
+    
+                        response.set_body(html);
+                    },
+                    _ => {
+                        response.set_body("<h1>Not Found</h1>".into());
+                    }
+                }
             },
-            _ => panic!("Method not implemented.")
+            _ => {
+                response.set_body("<h1>Method not allowed</h1>".into());
+            }
         }
+
+        stream.write_all(response.to_string().as_bytes()).unwrap();
+
     } else {
         stream.shutdown(Shutdown::Both).unwrap();
     }

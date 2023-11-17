@@ -111,7 +111,7 @@ pub fn parse_request(stream: &TcpStream) -> Option<Request> {
         while let Some(line) = lines.next() {
             let line = line.unwrap();
 
-            if line.trim().is_empty() || line == "\n\n" {
+            if line.trim().is_empty() {
                 break;
             }
 

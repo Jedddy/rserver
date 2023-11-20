@@ -3,6 +3,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpStream, Shutdown};
 
+
 #[derive(Debug)]
 pub enum RequestMethod {
     GET,
@@ -35,6 +36,8 @@ pub struct Request {
 pub enum HTTPStatus {
     #[default]
     OK,
+    NotFound,
+    MethodNotAllowed,
     BadRequest,
 }
 
@@ -63,6 +66,8 @@ impl ToString for Response {
 
         let (code, message) = match self.status {
             HTTPStatus::OK => (200, "OK"),
+            HTTPStatus::NotFound => (404, "Not Found"),
+            HTTPStatus::MethodNotAllowed => (405, "Method Not Allowed"),
             HTTPStatus::BadRequest => (400, "Bad Request")
         };
 
@@ -133,8 +138,6 @@ pub fn handle_request(mut stream: TcpStream) {
     let request = parse_request(&stream);
 
     if let Some(req) = request {
-        println!("{:?} {}", req.method, req.path);
-
         let mut response = Response::default();
 
         match req.method {
@@ -146,16 +149,20 @@ pub fn handle_request(mut stream: TcpStream) {
                         response.set_body(html);
                     },
                     _ => {
+                        response.status = HTTPStatus::NotFound;
                         response.set_body("<h1>Not Found</h1>".into());
                     }
                 }
             },
             _ => {
+                response.status = HTTPStatus::MethodNotAllowed;
+                response.add_header("Allow", "GET");
                 response.set_body("<h1>Method not allowed</h1>".into());
             }
         }
 
         stream.write_all(response.to_string().as_bytes()).unwrap();
+        println!("{:?} {} {:?}", req.method, req.path, response.status);
 
     } else {
         stream.shutdown(Shutdown::Both).unwrap();
